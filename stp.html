@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stp</title>
+<style>
+/* ── Reset ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #000;
+  --fg: #fff;
+  --toolbar-bg: #111;
+  --toolbar-border: #2a2a2a;
+  --accent: #4a9eff;
+  --text-width: 70vw;
+  --font-size: 36px;
+  --line-height: 1.6;
+  --text-align: center;
+}
+
+html { height: 100%; }
+
+body {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* ── Toolbar ───────────────────────────────────────────────── */
+#toolbar {
+  flex-shrink: 0;
+  background: var(--toolbar-bg);
+  border-bottom: 1px solid var(--toolbar-border);
+  user-select: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 8px 12px;
+  min-height: 50px;
+}
+
+/* Action buttons — always leftmost */
+#bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Settings — only shown when expanded */
+#bar-settings {
+  display: flex;
+  align-items: center;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+}
+#toolbar:not(.expanded) #bar-settings { display: none; }
+
+/* Spacer pushes toggle to the right */
+.bar-spacer { flex: 1; }
+
+/* ── Buttons ───────────────────────────────────────────────── */
+button {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  border-radius: 5px;
+  white-space: nowrap;
+  transition: background .12s, color .12s;
+}
+
+.btn-icon {
+  background: #222;
+  color: #bbb;
+  font-size: 13px;
+  padding: 5px 10px;
+  line-height: 1;
+}
+.btn-icon:hover:not(:disabled) { background: #333; color: #fff; }
+.btn-icon.active { background: var(--accent); color: #000; }
+button:disabled { opacity: .3; cursor: default; }
+
+.btn-play {
+  background: #22c55e;
+  color: #000;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 6px 16px;
+}
+.btn-play:hover:not(:disabled) { background: #16a34a; }
+.btn-play.is-paused { background: #f59e0b; }
+.btn-play.is-paused:hover:not(:disabled) { background: #d97706; }
+
+#bar-toggle-btn {
+  background: transparent;
+  color: #555;
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+#bar-toggle-btn:hover { color: #888; }
+
+/* Speed controls in action bar */
+#speed-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+#val-speed-bar {
+  font-size: 12px;
+  color: var(--accent);
+  min-width: 20px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Control groups ────────────────────────────────────────── */
+.ctrl-group { display: flex; flex-direction: column; gap: 2px; }
+
+.ctrl-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: #555;
+}
+
+.ctrl-row { display: flex; align-items: center; gap: 5px; }
+
+.ctrl-val {
+  font-size: 12px;
+  color: var(--accent);
+  min-width: 32px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Range sliders ─────────────────────────────────────────── */
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 78px;
+  height: 4px;
+  border-radius: 2px;
+  background: #333;
+  outline: none;
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+input[type=range]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+}
+
+/* ── Theme dots ────────────────────────────────────────────── */
+.theme-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #444;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color .12s;
+}
+.theme-dot.active { border-color: var(--accent); }
+
+/* ── Separator ─────────────────────────────────────────────── */
+.sep {
+  width: 1px;
+  height: 24px;
+  background: #2a2a2a;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+/* ── Main row (prompter + TOC side by side) ────────────────── */
+#main-row {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* ── Prompter area ─────────────────────────────────────────── */
+#prompter-area {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--bg);
+  padding: 48px 20px 0;
+}
+
+#content-wrapper {
+  width: var(--text-width);
+  margin: 0 auto;
+}
+
+/* ── Textarea (edit mode) ──────────────────────────────────── */
+#input {
+  display: block;
+  width: 100%;
+  min-height: 60vh;
+  background: transparent;
+  border: 1px dashed #2a2a2a;
+  border-radius: 6px;
+  color: var(--fg);
+  font-size: var(--font-size);
+  line-height: var(--line-height);
+  text-align: var(--text-align);
+  font-family: inherit;
+  padding: 16px;
+  resize: none;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+#input::placeholder { color: #333; font-size: 18px; line-height: 1.6; }
+#input:focus { border-color: #3a3a3a; }
+
+/* ── Output (prompter mode) ────────────────────────────────── */
+#output {
+  display: none;
+  font-size: var(--font-size);
+  line-height: var(--line-height);
+  text-align: var(--text-align);
+  color: var(--fg);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  padding-bottom: 70vh;
+}
+#output.mirror-h                    { transform: scaleX(-1); }
+#output.mirror-v                    { transform: scaleY(-1); }
+#output.mirror-h.mirror-v           { transform: scaleX(-1) scaleY(-1); }
+
+/* ── TOC panel (flex sidebar) ──────────────────────────────── */
+#toc-panel {
+  flex-shrink: 0;
+  width: 0;
+  overflow: hidden;
+  transition: width .2s ease;
+  background: var(--toolbar-bg);
+  border-left: 1px solid transparent;
+}
+#toc-panel.open {
+  width: 220px;
+  border-left-color: var(--toolbar-border);
+}
+
+#toc-inner {
+  width: 220px;
+  height: 100%;
+  overflow-y: auto;
+  padding: 14px 10px;
+}
+
+#toc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 0 4px;
+}
+
+#toc-header h3 {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: #555;
+}
+
+#toc-close {
+  background: transparent;
+  color: #555;
+  font-size: 13px;
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+#toc-close:hover { color: #999; }
+
+.toc-item {
+  display: block;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--accent);
+  cursor: pointer;
+  line-height: 1.4;
+  transition: background .1s;
+}
+.toc-item:hover { background: rgba(74, 158, 255, .1); }
+.toc-h1 { font-weight: 600; }
+.toc-h2 { padding-left: 18px; font-size: 12px; color: #888; }
+.toc-h3 { padding-left: 30px; font-size: 11px; color: #555; }
+
+/* ── Light theme ───────────────────────────────────────────── */
+body.theme-light .btn-icon { background: #e0e0e0; color: #333; }
+body.theme-light .btn-icon:hover:not(:disabled) { background: #ccc; color: #000; }
+body.theme-light .sep { background: #ccc; }
+body.theme-light input[type=range] { background: #ccc; }
+body.theme-light #toc-close { color: #999; }
+body.theme-light #toc-close:hover { color: #555; }
+body.theme-light .toc-item:hover { background: rgba(0, 80, 180, .08); }
+body.theme-light #bar-toggle-btn { color: #aaa; }
+body.theme-light #bar-toggle-btn:hover { color: #666; }
+</style>
+</head>
+<body>
+
+<!-- ── TOOLBAR ───────────────────────────────────────────────── -->
+<div id="toolbar" class="expanded">
+
+  <!-- Action buttons — always leftmost, same position in both states -->
+  <div id="bar-actions">
+    <button class="btn-play" id="btn-play">▶ Start</button>
+    <button class="btn-icon" id="btn-top"    title="Jump to top">⏫ Top</button>
+    <button class="btn-icon" id="btn-toc"    title="Table of contents">📋 TOC</button>
+    <button class="btn-icon" id="btn-mirror-h" title="Mirror horizontal">↔</button>
+    <button class="btn-icon" id="btn-mirror-v" title="Mirror vertical">↕</button>
+    <div class="sep"></div>
+    <div id="speed-bar">
+      <button class="btn-icon" id="btn-speed-down" title="Slow down (←)">−</button>
+      <span id="val-speed-bar">5</span>
+      <button class="btn-icon" id="btn-speed-up" title="Speed up (→)">+</button>
+    </div>
+  </div>
+
+  <!-- Settings — only shown when expanded -->
+  <div id="bar-settings">
+
+    <div class="sep"></div>
+
+    <!-- Font size -->
+    <div class="ctrl-group">
+      <span class="ctrl-label">Font size</span>
+      <div class="ctrl-row">
+        <button class="btn-icon" id="btn-font-minus">−</button>
+        <span class="ctrl-val" id="val-font">36px</span>
+        <button class="btn-icon" id="btn-font-plus">+</button>
+      </div>
+    </div>
+
+    <!-- Speed -->
+    <div class="ctrl-group">
+      <span class="ctrl-label">Speed</span>
+      <div class="ctrl-row">
+        <input type="range" id="sl-speed" min="1" max="20" value="5">
+        <span class="ctrl-val" id="val-speed">5</span>
+      </div>
+    </div>
+
+    <!-- Width -->
+    <div class="ctrl-group">
+      <span class="ctrl-label">Width</span>
+      <div class="ctrl-row">
+        <input type="range" id="sl-width" min="30" max="100" step="5" value="70">
+        <span class="ctrl-val" id="val-width">70%</span>
+      </div>
+    </div>
+
+    <!-- Line spacing -->
+    <div class="ctrl-group">
+      <span class="ctrl-label">Line gap</span>
+      <div class="ctrl-row">
+        <input type="range" id="sl-lh" min="1.2" max="2.5" step="0.1" value="1.6">
+        <span class="ctrl-val" id="val-lh">1.6</span>
+      </div>
+    </div>
+
+    <div class="sep"></div>
+
+    <!-- Alignment -->
+    <div class="ctrl-group">
+      <span class="ctrl-label">Align</span>
+      <div class="ctrl-row" id="align-btns">
+        <button class="btn-icon" data-align="left"   title="Left">⬅</button>
+        <button class="btn-icon active" data-align="center" title="Center">☰</button>
+        <button class="btn-icon" data-align="right"  title="Right">➡</button>
+      </div>
+    </div>
+
+    <!-- Theme -->
+    <div class="ctrl-group">
+      <span class="ctrl-label">Theme</span>
+      <div class="ctrl-row" id="theme-dots">
+        <div class="theme-dot active" data-theme="dark"  style="background:#000" title="White on black"></div>
+        <div class="theme-dot"        data-theme="light" style="background:#fff" title="Black on white"></div>
+      </div>
+    </div>
+
+  </div><!-- /bar-settings -->
+
+  <span class="bar-spacer"></span>
+  <button id="bar-toggle-btn" title="Expand / collapse settings">▾</button>
+
+</div><!-- /toolbar -->
+
+<!-- ── MAIN ROW ───────────────────────────────────────────────── -->
+<div id="main-row">
+
+  <!-- Prompter / edit area -->
+  <div id="prompter-area">
+    <div id="content-wrapper">
+      <textarea id="input"
+        placeholder="Paste your script here…&#10;&#10;Tip: use # Heading, ## Subheading, ### Sub-subheading&#10;to auto-generate a table of contents."></textarea>
+      <div id="output"></div>
+    </div>
+  </div>
+
+  <!-- TOC sidebar -->
+  <div id="toc-panel">
+    <div id="toc-inner">
+      <div id="toc-header">
+        <h3>Table of Contents</h3>
+        <button id="toc-close" title="Close TOC">✕</button>
+      </div>
+      <div id="toc-list"></div>
+    </div>
+  </div>
+
+</div><!-- /main-row -->
+
+<script>
+'use strict';
+
+// ── State ─────────────────────────────────────────────────────
+const state = {
+  scrolling: false,
+  speed: 5,
+  fontSize: 36,
+  width: 70,
+  lineHeight: 1.6,
+  align: 'center',
+  theme: 'dark',
+  mirrorH: false,
+  mirrorV: false,
+  tocOpen: false,
+  inPrompterMode: false,
+};
+
+// ── Timers ────────────────────────────────────────────────────
+let tocAutoHideTimer = null;
+
+// ── Element refs ──────────────────────────────────────────────
+const toolbar      = document.getElementById('toolbar');
+const prompterArea = document.getElementById('prompter-area');
+const inputEl      = document.getElementById('input');
+const outputEl     = document.getElementById('output');
+const tocPanel     = document.getElementById('toc-panel');
+const tocList      = document.getElementById('toc-list');
+
+const btnPlay      = document.getElementById('btn-play');
+const btnTop       = document.getElementById('btn-top');
+const btnToc       = document.getElementById('btn-toc');
+const btnMirrorH   = document.getElementById('btn-mirror-h');
+const btnMirrorV   = document.getElementById('btn-mirror-v');
+const barToggleBtn = document.getElementById('bar-toggle-btn');
+const tocCloseBtn  = document.getElementById('toc-close');
+
+const slSpeed      = document.getElementById('sl-speed');
+const slWidth      = document.getElementById('sl-width');
+const slLh         = document.getElementById('sl-lh');
+const valFont      = document.getElementById('val-font');
+const valSpeed     = document.getElementById('val-speed');
+const valWidth     = document.getElementById('val-width');
+const valLh        = document.getElementById('val-lh');
+
+// ── rAF loop ──────────────────────────────────────────────────
+let rafId = null;
+
+function tick() {
+  if (state.scrolling) {
+    prompterArea.scrollTop += state.speed * 0.125;
+    const atEnd = prompterArea.scrollTop >=
+                  prompterArea.scrollHeight - prompterArea.clientHeight - 2;
+    if (atEnd) {
+      state.scrolling = false;
+      updatePlayButton();
+    }
+  }
+  rafId = requestAnimationFrame(tick);
+}
+
+// ── Apply CSS settings ────────────────────────────────────────
+function applySettings() {
+  const root = document.documentElement;
+  if (state.theme === 'dark') {
+    root.style.setProperty('--bg', '#000');
+    root.style.setProperty('--fg', '#fff');
+    root.style.setProperty('--toolbar-bg', '#111');
+    root.style.setProperty('--toolbar-border', '#2a2a2a');
+    document.body.classList.remove('theme-light');
+  } else {
+    root.style.setProperty('--bg', '#fff');
+    root.style.setProperty('--fg', '#111');
+    root.style.setProperty('--toolbar-bg', '#f5f5f5');
+    root.style.setProperty('--toolbar-border', '#ddd');
+    document.body.classList.add('theme-light');
+  }
+  root.style.setProperty('--font-size',   state.fontSize + 'px');
+  root.style.setProperty('--line-height', state.lineHeight);
+  root.style.setProperty('--text-width',  state.width + 'vw');
+  root.style.setProperty('--text-align',  state.align);
+}
+
+function updatePlayButton() {
+  let label, cls;
+  if (!state.inPrompterMode) {
+    label = '▶ Start'; cls = '';
+  } else if (state.scrolling) {
+    label = '⏸ Pause'; cls = '';
+  } else {
+    label = '▶ Resume'; cls = 'is-paused';
+  }
+  btnPlay.textContent = label;
+  btnPlay.className = 'btn-play' + (cls ? ' ' + cls : '');
+}
+
+function setExpanded(expanded) {
+  toolbar.classList.toggle('expanded', expanded);
+  barToggleBtn.textContent = expanded ? '▾' : '▴';
+}
+
+// ── TOC ───────────────────────────────────────────────────────
+function parseHeadings(text) {
+  const headings = [];
+  text.split('\n').forEach((line, i) => {
+    const m = line.match(/^(#{1,3})\s+(.+)/);
+    if (m) headings.push({ level: m[1].length, text: m[2].trim(), id: 'h' + i });
+  });
+  return headings;
+}
+
+function renderOutput(text) {
+  let html = '';
+  text.split('\n').forEach((line, i) => {
+    const safe = line
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    if (/^#{1,3}\s/.test(line)) {
+      html += '<span id="h' + i + '">' + safe + '</span>\n';
+    } else {
+      html += safe + '\n';
+    }
+  });
+  outputEl.innerHTML = html.replace(/\n$/, '');
+}
+
+function buildToc(headings) {
+  const hasToc = headings.length > 0;
+  btnToc.disabled = !hasToc;
+
+  if (!hasToc) {
+    tocList.innerHTML = '<p style="color:#555;font-size:12px;padding:4px">No headings found.<br>Use # Heading in your script.</p>';
+    return;
+  }
+
+  tocList.innerHTML = headings.map(h => {
+    const safe = h.text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    return `<div class="toc-item toc-h${h.level}" data-id="${h.id}">${safe}</div>`;
+  }).join('');
+
+  tocList.querySelectorAll('.toc-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const target = document.getElementById(el.dataset.id);
+      if (target) {
+        const targetRect = target.getBoundingClientRect();
+        const areaRect   = prompterArea.getBoundingClientRect();
+        prompterArea.scrollTop += targetRect.top - areaRect.top - 20;
+      }
+      // Keep TOC visible for 5s then auto-hide
+      if (tocAutoHideTimer) clearTimeout(tocAutoHideTimer);
+      tocAutoHideTimer = setTimeout(() => setToc(false), 5000);
+    });
+  });
+}
+
+function setToc(open) {
+  if (tocAutoHideTimer) { clearTimeout(tocAutoHideTimer); tocAutoHideTimer = null; }
+  state.tocOpen = open;
+  tocPanel.classList.toggle('open', open);
+  btnToc.classList.toggle('active', open);
+}
+
+function toggleToc() { setToc(!state.tocOpen); }
+
+// ── Mode transitions ──────────────────────────────────────────
+function startPrompter() {
+  const text = inputEl.value;
+  if (!text.trim()) return;
+
+  renderOutput(text);
+  buildToc(parseHeadings(text));
+
+  inputEl.style.display  = 'none';
+  outputEl.style.display = 'block';
+  state.inPrompterMode   = true;
+  state.scrolling        = true;
+  prompterArea.scrollTop = 0;
+
+  setExpanded(false);
+  updatePlayButton();
+  applySettings();
+}
+
+function togglePlayPause() {
+  if (!state.inPrompterMode) { startPrompter(); return; }
+
+  state.scrolling = !state.scrolling;
+  // Auto-expand settings when paused so user can adjust; collapse when resuming
+  if (!state.scrolling) setExpanded(true);
+  else setExpanded(false);
+  updatePlayButton();
+}
+
+function goToTop() {
+  prompterArea.scrollTop = 0;
+  if (state.inPrompterMode) {
+    state.scrolling = false;
+    setExpanded(true);
+    updatePlayButton();
+  }
+}
+
+function exitToEdit() {
+  state.scrolling        = false;
+  state.inPrompterMode   = false;
+  outputEl.style.display = 'none';
+  inputEl.style.display  = 'block';
+  setExpanded(true);
+  setToc(false);
+  updatePlayButton();
+  inputEl.focus();
+}
+
+// ── Toolbar toggle (expand/collapse only — never pauses) ──────
+barToggleBtn.addEventListener('click', () => {
+  setExpanded(!toolbar.classList.contains('expanded'));
+});
+
+// ── Wire controls ─────────────────────────────────────────────
+btnPlay.addEventListener('click',   () => togglePlayPause());
+btnTop.addEventListener('click',    () => goToTop());
+btnToc.addEventListener('click',    () => toggleToc());
+tocCloseBtn.addEventListener('click', () => setToc(false));
+
+btnMirrorH.addEventListener('click', () => {
+  state.mirrorH = !state.mirrorH;
+  outputEl.classList.toggle('mirror-h', state.mirrorH);
+  btnMirrorH.classList.toggle('active', state.mirrorH);
+});
+
+btnMirrorV.addEventListener('click', () => {
+  state.mirrorV = !state.mirrorV;
+  outputEl.classList.toggle('mirror-v', state.mirrorV);
+  btnMirrorV.classList.toggle('active', state.mirrorV);
+});
+
+document.getElementById('btn-font-minus').addEventListener('click', () => {
+  state.fontSize = Math.max(16, state.fontSize - 4);
+  valFont.textContent = state.fontSize + 'px';
+  applySettings();
+});
+document.getElementById('btn-font-plus').addEventListener('click', () => {
+  state.fontSize = Math.min(96, state.fontSize + 4);
+  valFont.textContent = state.fontSize + 'px';
+  applySettings();
+});
+
+function setSpeed(v) {
+  state.speed = Math.max(1, Math.min(20, v));
+  slSpeed.value = state.speed;
+  valSpeed.textContent = state.speed;
+  document.getElementById('val-speed-bar').textContent = state.speed;
+}
+
+slSpeed.addEventListener('input', () => setSpeed(+slSpeed.value));
+
+document.getElementById('btn-speed-down').addEventListener('click', () => setSpeed(state.speed - 1));
+document.getElementById('btn-speed-up').addEventListener('click',   () => setSpeed(state.speed + 1));
+
+slWidth.addEventListener('input', () => {
+  state.width = +slWidth.value;
+  valWidth.textContent = state.width + '%';
+  applySettings();
+});
+
+slLh.addEventListener('input', () => {
+  state.lineHeight = +slLh.value;
+  valLh.textContent = (+slLh.value).toFixed(1);
+  applySettings();
+});
+
+document.getElementById('align-btns').addEventListener('click', e => {
+  const btn = e.target.closest('[data-align]');
+  if (!btn) return;
+  state.align = btn.dataset.align;
+  document.querySelectorAll('[data-align]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applySettings();
+});
+
+document.getElementById('theme-dots').addEventListener('click', e => {
+  const dot = e.target.closest('[data-theme]');
+  if (!dot) return;
+  state.theme = dot.dataset.theme;
+  document.querySelectorAll('[data-theme]').forEach(d => d.classList.remove('active'));
+  dot.classList.add('active');
+  applySettings();
+});
+
+// ── Keyboard shortcuts ────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (!state.inPrompterMode) return;
+  if (document.activeElement === inputEl) return;
+
+  switch (e.code) {
+    case 'Space':
+      e.preventDefault();
+      togglePlayPause();
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      prompterArea.scrollTop -= 40;
+      break;
+    case 'ArrowDown':
+      e.preventDefault();
+      prompterArea.scrollTop += 40;
+      break;
+    case 'ArrowLeft':
+      e.preventDefault();
+      setSpeed(state.speed - 1);
+      break;
+    case 'ArrowRight':
+      e.preventDefault();
+      setSpeed(state.speed + 1);
+      break;
+    case 'KeyC':
+      e.preventDefault();
+      toggleToc();
+      break;
+    case 'Escape':
+      e.preventDefault();
+      exitToEdit();
+      break;
+  }
+});
+
+// ── Init ──────────────────────────────────────────────────────
+applySettings();
+inputEl.focus();
+rafId = requestAnimationFrame(tick);
+</script>
+</body>
+</html>
