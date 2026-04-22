@@ -2,13 +2,13 @@
 
 **Simple Teleprompter** — or *s'il te plaît*, if you prefer.
 
-A minimal, standalone teleprompter that runs entirely in your browser — no server, no install, no internet required. Open `teleprompter.html` and go.
+A minimal, standalone teleprompter that runs entirely in your browser — no server, no install, no internet required. Open `stp.html` and go.
 
 ---
 
 ## Getting started
 
-Download or clone the repo, then open `teleprompter.html` directly in any modern browser (Chrome, Firefox, Safari, Edge).
+Download or clone the repo, then open `stp.html` directly in any modern browser (Chrome, Firefox, Safari, Edge).
 
 1. Paste your script into the text area
 2. Adjust settings in the top bar to your liking
